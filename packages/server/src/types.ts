@@ -1,6 +1,6 @@
-import type { RequestListener } from 'node:http';
-import type { NodeRequest, NodeResponse } from './utils.js';
-import { UWSHandler, UWSRequest, UWSResponse } from './uwebsockets.js';
+import type { RequestListener } from 'http';
+import { NodeRequest, NodeResponse } from './internal-plugins/useNodeAdapter.js';
+import type { UWSRequest, UWSResponse } from './internal-plugins/useUWSAdapter.js';
 
 export interface FetchEvent extends Event {
   waitUntil(f: Promise<void> | void): void;
@@ -57,8 +57,6 @@ export interface ServerAdapterObject<TServerContext> extends EventListenerObject
    */
   requestListener: RequestListener;
 
-  handleUWS: UWSHandler;
-
   handle(req: NodeRequest, res: NodeResponse, ...ctx: Partial<TServerContext>[]): Promise<void>;
   handle(request: Request, ...ctx: Partial<TServerContext>[]): Promise<Response> | Response;
   handle(fetchEvent: FetchEvent & Partial<TServerContext>, ...ctx: Partial<TServerContext>[]): void;
@@ -80,11 +78,6 @@ export type ServerAdapterRequestHandler<TServerContext> = (
   request: Request,
   ctx: TServerContext,
 ) => Promise<Response> | Response;
-
-export type ServerAdapterNodeContext = {
-  req: NodeRequest;
-  res: NodeResponse;
-};
 
 export type WaitUntilFn = (promise: Promise<void> | void) => void;
 

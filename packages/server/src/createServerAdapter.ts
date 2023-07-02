@@ -1,60 +1,22 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import * as DefaultFetchAPI from '@whatwg-node/fetch';
-import { OnRequestHook, OnResponseHook, ServerAdapterPlugin } from './plugins/types.js';
+import { useFetchEvent } from './internal-plugins/useFetchEvent.js';
+import { useNodeAdapter } from './internal-plugins/useNodeAdapter.js';
+import { useUWSAdapter } from './internal-plugins/useUWSAdapter.js';
+import {
+  OnRequestAdapt,
+  OnRequestHook,
+  OnResponseHook,
+  ServerAdapterPlugin,
+} from './plugins/types.js';
 import {
   FetchAPI,
-  FetchEvent,
   ServerAdapter,
   ServerAdapterBaseObject,
   ServerAdapterObject,
   ServerAdapterRequestHandler,
 } from './types.js';
-import {
-  completeAssign,
-  isFetchEvent,
-  isNodeRequest,
-  isRequestInit,
-  isServerResponse,
-  NodeRequest,
-  NodeResponse,
-  normalizeNodeRequest,
-  sendNodeResponse,
-} from './utils.js';
-import {
-  getRequestFromUWSRequest,
-  isUWSResponse,
-  sendResponseToUwsOpts,
-  type UWSRequest,
-  type UWSResponse,
-} from './uwebsockets.js';
-
-async function handleWaitUntils(waitUntilPromises: Promise<unknown>[]) {
-  const waitUntils = await Promise.allSettled(waitUntilPromises);
-  waitUntils.forEach(waitUntil => {
-    if (waitUntil.status === 'rejected') {
-      console.error(waitUntil.reason);
-    }
-  });
-}
-
-type RequestContainer = { request: Request };
-
-// Required for envs like nextjs edge runtime
-function isRequestAccessible(serverContext: any): serverContext is RequestContainer {
-  try {
-    return !!serverContext?.request;
-  } catch {
-    return false;
-  }
-}
-
-function addWaitUntil(serverContext: any, waitUntilPromises: Promise<unknown>[]): void {
-  serverContext['waitUntil'] = function (promise: Promise<void> | void) {
-    if (promise != null) {
-      waitUntilPromises.push(promise);
-    }
-  };
-}
+import { completeAssign, isRequestInit } from './utils.js';
 
 export interface ServerAdapterOptions<TServerContext> {
   plugins?: ServerAdapterPlugin<TServerContext>[];
@@ -97,17 +59,23 @@ function createServerAdapter<
       ? serverAdapterBaseObject
       : serverAdapterBaseObject.handle;
 
+  const onRequestAdaptHooks: OnRequestAdapt<TServerContext>[] = [];
   const onRequestHooks: OnRequestHook<TServerContext>[] = [];
   const onResponseHooks: OnResponseHook<TServerContext>[] = [];
 
-  if (options?.plugins != null) {
-    for (const plugin of options.plugins) {
-      if (plugin.onRequest) {
-        onRequestHooks.push(plugin.onRequest);
-      }
-      if (plugin.onResponse) {
-        onResponseHooks.push(plugin.onResponse);
-      }
+  const plugins = options?.plugins ?? [];
+
+  (plugins as any).push(useUWSAdapter(), useNodeAdapter(), useFetchEvent());
+
+  for (const plugin of plugins) {
+    if (plugin.onRequestAdapt) {
+      onRequestAdaptHooks.push(plugin.onRequestAdapt);
+    }
+    if (plugin.onRequest) {
+      onRequestHooks.push(plugin.onRequest);
+    }
+    if (plugin.onResponse) {
+      onResponseHooks.push(plugin.onResponse);
     }
   }
 
@@ -120,6 +88,16 @@ function createServerAdapter<
     }) as URL;
     let requestHandler: ServerAdapterRequestHandler<any> = givenHandleRequest;
     let response: Response | undefined;
+    let waitUntilPromises: Set<Promise<unknown>> | undefined;
+    if ((serverContext as any)['waitUntil'] == null) {
+      waitUntilPromises = new Set();
+      (serverContext as any)['waitUntil'] = (promise: Promise<unknown>) => {
+        waitUntilPromises!.add(promise);
+        promise.then(() => {
+          waitUntilPromises!.delete(promise);
+        });
+      };
+    }
     for (const onRequestHook of onRequestHooks) {
       await onRequestHook({
         request,
@@ -141,6 +119,12 @@ function createServerAdapter<
     if (!response) {
       response = await requestHandler(request, serverContext);
     }
+    if (!response) {
+      response = new fetchAPI.Response(undefined, {
+        status: 404,
+        statusText: 'Not Found',
+      });
+    }
     for (const onResponseHook of onResponseHooks) {
       await onResponseHook({
         request,
@@ -148,89 +132,15 @@ function createServerAdapter<
         serverContext,
       });
     }
-    return response;
-  }
-
-  function handleNodeRequest(nodeRequest: NodeRequest, ...ctx: Partial<TServerContext>[]) {
-    const serverContext = ctx.length > 1 ? completeAssign(...ctx) : ctx[0] || {};
-    const request = normalizeNodeRequest(nodeRequest, fetchAPI.Request);
-    return handleRequest(request, serverContext);
-  }
-
-  async function requestListener(
-    nodeRequest: NodeRequest,
-    serverResponse: NodeResponse,
-    ...ctx: Partial<TServerContext>[]
-  ) {
-    const waitUntilPromises: Promise<unknown>[] = [];
-    const defaultServerContext = {
-      req: nodeRequest,
-      res: serverResponse,
-    };
-    addWaitUntil(defaultServerContext, waitUntilPromises);
-    const response = await handleNodeRequest(nodeRequest, defaultServerContext as any, ...ctx);
-    if (response) {
-      await sendNodeResponse(response, serverResponse, nodeRequest);
-    } else {
-      await new Promise<void>(resolve => {
-        serverResponse.statusCode = 404;
-        serverResponse.once('end', resolve);
-        serverResponse.end();
+    if (waitUntilPromises?.size) {
+      const waitUntils = await Promise.allSettled(waitUntilPromises);
+      waitUntils.forEach(waitUntil => {
+        if (waitUntil.status === 'rejected') {
+          console.error(waitUntil.reason);
+        }
       });
     }
-    if (waitUntilPromises.length > 0) {
-      await handleWaitUntils(waitUntilPromises);
-    }
-  }
-
-  async function handleUWS(res: UWSResponse, req: UWSRequest, ...ctx: Partial<TServerContext>[]) {
-    const waitUntilPromises: Promise<unknown>[] = [];
-    const defaultServerContext = {
-      res,
-      req,
-    };
-    addWaitUntil(defaultServerContext, waitUntilPromises);
-    const serverContext =
-      ctx.length > 0 ? completeAssign(defaultServerContext, ...ctx) : defaultServerContext;
-    const request = getRequestFromUWSRequest({
-      req,
-      res,
-      fetchAPI,
-    });
-    const response = await handleRequest(request, serverContext);
-    if (!response) {
-      res.writeStatus('404 Not Found');
-      res.end();
-      return;
-    }
-
-    return sendResponseToUwsOpts({
-      response,
-      res,
-    });
-  }
-
-  function handleEvent(event: FetchEvent, ...ctx: Partial<TServerContext>[]): void {
-    if (!event.respondWith || !event.request) {
-      throw new TypeError(`Expected FetchEvent, got ${event}`);
-    }
-    const serverContext = ctx.length > 0 ? Object.assign({}, event, ...ctx) : event;
-    const response$ = handleRequest(event.request, serverContext);
-    event.respondWith(response$);
-  }
-
-  function handleRequestWithWaitUntil(request: Request, ...ctx: Partial<TServerContext>[]) {
-    const serverContext = (ctx.length > 1 ? completeAssign(...ctx) : ctx[0]) || {};
-    if (serverContext.waitUntil == null) {
-      const waitUntilPromises: Promise<void>[] = [];
-      addWaitUntil(serverContext, waitUntilPromises);
-      const response$ = handleRequest(request, serverContext);
-      if (waitUntilPromises.length > 0) {
-        return handleWaitUntils(waitUntilPromises).then(() => response$);
-      }
-      return response$;
-    }
-    return handleRequest(request, serverContext);
+    return response;
   }
 
   const fetchFn: ServerAdapterObject<TServerContext>['fetch'] = (
@@ -240,62 +150,51 @@ function createServerAdapter<
     if (typeof input === 'string' || 'href' in input) {
       const [initOrCtx, ...restOfCtx] = maybeCtx;
       if (isRequestInit(initOrCtx)) {
-        return handleRequestWithWaitUntil(new fetchAPI.Request(input, initOrCtx), ...restOfCtx);
+        const serverContext = restOfCtx.length > 0 ? completeAssign(...restOfCtx) : {};
+        return handleRequest(new fetchAPI.Request(input, initOrCtx), serverContext);
       }
-      return handleRequestWithWaitUntil(new fetchAPI.Request(input), ...maybeCtx);
+      const serverContext = maybeCtx.length > 0 ? completeAssign(...maybeCtx) : {};
+      return handleRequest(new fetchAPI.Request(input), serverContext);
     }
-    return handleRequestWithWaitUntil(input, ...maybeCtx);
+    const serverContext = maybeCtx.length > 0 ? completeAssign(...maybeCtx) : {};
+    return handleRequest(input, serverContext);
   };
 
   const genericRequestHandler = (
-    input:
-      | Request
-      | FetchEvent
-      | NodeRequest
-      | ({ request: Request } & Partial<TServerContext>)
-      | UWSResponse,
-    ...maybeCtx: Partial<TServerContext>[]
+    ...args: [any, ...any[]]
   ): Promise<Response> | Response | Promise<void> | void => {
-    // If it is a Node request
-    const [initOrCtxOrRes, ...restOfCtx] = maybeCtx;
+    let request: Request | undefined;
+    let serverContext: TServerContext | undefined;
 
-    if (isNodeRequest(input)) {
-      if (!isServerResponse(initOrCtxOrRes)) {
-        throw new TypeError(`Expected ServerResponse, got ${initOrCtxOrRes}`);
+    for (const onRequestAdapt of onRequestAdaptHooks) {
+      onRequestAdapt({
+        args,
+        setRequest(newRequest) {
+          request = newRequest;
+        },
+        setServerContext(newServerContext) {
+          serverContext = newServerContext;
+        },
+        fetchAPI,
+      });
+    }
+
+    if (request) {
+      if (!serverContext) {
+        serverContext = {} as TServerContext;
       }
-      return requestListener(input, initOrCtxOrRes, ...restOfCtx);
+      return handleRequest(request, serverContext);
     }
 
-    if (isUWSResponse(input)) {
-      return handleUWS(input, initOrCtxOrRes as any, ...restOfCtx);
-    }
-
-    if (isServerResponse(initOrCtxOrRes)) {
-      throw new TypeError('Got Node response without Node request');
-    }
-
-    // Is input a container object over Request?
-    if (isRequestAccessible(input)) {
-      // Is it FetchEvent?
-      if (isFetchEvent(input)) {
-        return handleEvent(input, ...maybeCtx);
-      }
-      // In this input is also the context
-      return handleRequestWithWaitUntil(input.request, input, ...maybeCtx);
-    }
-
-    // Or is it Request itself?
-    // Then ctx is present and it is the context
-    return fetchFn(input, ...maybeCtx);
+    return fetchFn(...args);
   };
 
   const adapterObj: ServerAdapterObject<TServerContext> = {
     handleRequest,
     fetch: fetchFn,
-    handleNodeRequest,
-    requestListener,
-    handleEvent,
-    handleUWS,
+    requestListener: genericRequestHandler,
+    handleNodeRequest: genericRequestHandler as any,
+    handleEvent: genericRequestHandler,
     handle: genericRequestHandler as ServerAdapterObject<TServerContext>['handle'],
   };
 

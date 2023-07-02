@@ -1,5 +1,45 @@
 import type { Readable } from 'node:stream';
-import type { FetchAPI } from './types.js';
+import { ServerAdapterPlugin } from '../plugins/types.js';
+import type { FetchAPI } from '../types.js';
+import { completeAssign } from '../utils.js';
+
+interface UWSServerContext {
+  req: UWSRequest;
+  res: UWSResponse;
+}
+
+export function useUWSAdapter(): ServerAdapterPlugin<UWSServerContext> {
+  const uwsResponseMap = new WeakMap<Request, UWSResponse>();
+  return {
+    onRequestAdapt({ args: [res, req, ...restOfCtx], setRequest, setServerContext, fetchAPI }) {
+      if (isUWSResponse(res)) {
+        const request = getRequestFromUWSRequest({
+          req: req as UWSRequest,
+          res,
+          fetchAPI,
+        });
+        uwsResponseMap.set(request, res);
+        setRequest(request);
+        const defaultServerContext = {
+          req,
+          res,
+        };
+        const serverContext =
+          restOfCtx.length > 0 ? completeAssign(...restOfCtx) : defaultServerContext;
+        setServerContext(serverContext);
+      }
+    },
+    onResponse({ request, response }) {
+      const res = uwsResponseMap.get(request);
+      if (res) {
+        return sendResponseToUwsOpts({
+          res,
+          response,
+        });
+      }
+    },
+  };
+}
 
 export interface UWSRequest {
   getMethod(): string;

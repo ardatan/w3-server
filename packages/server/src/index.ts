@@ -4,5 +4,7 @@ export * from './utils.js';
 export * from './plugins/types.js';
 export * from './plugins/useCors.js';
 export * from './plugins/useErrorHandling.js';
-export * from './uwebsockets.js';
+export * from './internal-plugins/useFetchEvent.js';
+export * from './internal-plugins/useNodeAdapter.js';
+export * from './internal-plugins/useUWSAdapter.js';
 export { Response } from '@whatwg-node/fetch';

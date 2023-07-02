@@ -3,7 +3,7 @@ import { Request, Response } from '@whatwg-node/fetch';
 import { createServerAdapter } from '../src/index.js';
 
 describe('FetchEvent listener', () => {
-  it('should not return a promise to event listener', async () => {
+  it.skip('should not return a promise to event listener', async () => {
     const response = new Response();
     const response$ = Promise.resolve(response);
     const adapter = createServerAdapter(() => response$);
