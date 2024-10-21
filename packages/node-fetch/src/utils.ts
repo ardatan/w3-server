@@ -4,6 +4,45 @@ function isHeadersInstance(obj: any): obj is Headers {
   return obj?.forEach != null;
 }
 
+export function patchReadableFromWeb() {
+  try {
+    const originalReadableFromWeb = Readable.fromWeb;
+    // eslint-disable-next-line no-inner-declarations
+    function ReadableFromWebPatchedByWhatWgNode(stream: any): Readable {
+      if (stream.readable instanceof Readable) {
+        return stream.readable;
+      }
+      return originalReadableFromWeb(stream as any);
+    }
+    if (originalReadableFromWeb.name !== 'ReadableFromWebPatchedByWhatWgNode') {
+      if (
+        typeof jest === 'object' &&
+        typeof beforeEach === 'function' &&
+        typeof afterEach === 'function'
+      ) {
+        // To relax jest, we should remove the patch after each test
+        beforeEach(() => {
+          if (Readable.fromWeb.name !== 'ReadableFromWebPatchedByWhatWgNode') {
+            Readable.fromWeb = ReadableFromWebPatchedByWhatWgNode;
+          }
+        });
+        afterEach(() => {
+          if (Readable.fromWeb.name === 'ReadableFromWebPatchedByWhatWgNode') {
+            Readable.fromWeb = originalReadableFromWeb;
+          }
+        });
+      } else {
+        Readable.fromWeb = ReadableFromWebPatchedByWhatWgNode;
+      }
+    }
+  } catch (e) {
+    console.warn(
+      'Could not patch Readable.fromWeb, so this might break Readable.fromWeb usage with the whatwg-node and the integrations like Fastify',
+      e,
+    );
+  }
+}
+
 export function getHeadersObj(headers: Headers): Record<string, string> {
   if (headers == null || !isHeadersInstance(headers)) {
     return headers as any;

@@ -43,6 +43,8 @@ module.exports = function createNodePonyfill(opts = {}) {
   ponyfills.Headers = newNodeFetch.Headers;
   ponyfills.FormData = newNodeFetch.FormData;
   ponyfills.ReadableStream = newNodeFetch.ReadableStream;
+  
+  newNodeFetch.patchReadableFromWeb();
 
   ponyfills.URL = newNodeFetch.URL;
   ponyfills.URLSearchParams = newNodeFetch.URLSearchParams;

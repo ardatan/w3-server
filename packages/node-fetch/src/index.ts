@@ -1,3 +1,5 @@
+export { patchReadableFromWeb } from './utils.js';
+
 export { fetchPonyfill as fetch } from './fetch.js';
 export { PonyfillHeaders as Headers } from './Headers.js';
 export { PonyfillBody as Body } from './Body.js';

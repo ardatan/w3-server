@@ -15,27 +15,6 @@ interface FastifyServerContext {
 
 type FastifyServerAdapter = ServerAdapter<any, ServerAdapterBaseObject<any>>;
 
-async function handleFastify(
-  serverAdapter: FastifyServerAdapter,
-  req: FastifyRequest,
-  reply: FastifyReply,
-) {
-  const response = await serverAdapter.handleNodeRequestAndResponse(req, reply, {
-    req: reply.request,
-    reply,
-  });
-
-  response.headers.forEach((value, key) => {
-    reply.header(key, value);
-  });
-
-  reply.status(response.status);
-
-  reply.send(response.body);
-
-  return reply;
-}
-
 describe('Fastify', () => {
   if (process.env.LEAK_TEST) {
     it('noop', () => {});
@@ -48,7 +27,11 @@ describe('Fastify', () => {
       fastifyServer.route({
         url: '/mypath',
         method: ['GET', 'POST', 'OPTIONS'],
-        handler: (req, reply) => handleFastify(serverAdapter, req, reply),
+        handler: (req, reply) =>
+          serverAdapter.handleNodeRequestAndResponse(req, reply, {
+            req,
+            reply,
+          }),
       });
       afterAll(() => fastifyServer.close());
       it('should handle streams', async () => {

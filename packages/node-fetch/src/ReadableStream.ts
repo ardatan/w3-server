@@ -210,6 +210,8 @@ export class PonyfillReadableStream<T> implements ReadableStream<T> {
   static [Symbol.hasInstance](instance: unknown): instance is PonyfillReadableStream<unknown> {
     return isReadableStream(instance);
   }
+
+  [Symbol.toStringTag] = 'ReadableStream';
 }
 
 function isPonyfillWritableStream(obj: any): obj is PonyfillWritableStream {

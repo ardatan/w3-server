@@ -152,7 +152,7 @@ So you can benefit from the powerful plugins of Fastify ecosystem.
 [See the ecosystem](https://www.fastify.io/docs/latest/Guides/Ecosystem/)
 
 ```ts
-import fastify, { FastifyReply, FastifyRequest } from 'fastify'
+import fastify from 'fastify'
 import myServerAdapter from './myServerAdapter'
 
 // This is the fastify instance you have created
@@ -166,22 +166,11 @@ const app = fastify({ logger: true })
 app.route({
   url: '/mypath',
   method: ['GET', 'POST', 'OPTIONS'],
-  handler: async (req, reply) => {
-    const response = await myServerAdapter.handleNodeRequestAndResponse(req, reply, {
+  handler: (req, reply) =>
+    myServerAdapter.handleNodeRequestAndResponse(req, reply, {
       req,
       reply
     })
-    response.headers.forEach((value, key) => {
-      reply.header(key, value)
-    })
-
-    reply.status(response.status)
-
-    // Fastify doesn't accept `null` as a response body
-    reply.send(response.body || undefined)
-
-    return reply
-  }
 })
 
 app.listen(4000)

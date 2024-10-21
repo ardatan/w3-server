@@ -4,10 +4,12 @@ const shouldSkipPonyfill = require('./shouldSkipPonyfill');
 const ponyfills = createNodePonyfill();
 
 if (!shouldSkipPonyfill()) {
-  try {
-    const nodelibcurlName = 'node-libcurl'
-    globalThis.libcurl = globalThis.libcurl || require(nodelibcurlName);
-  } catch (e) { }
+  const nodelibcurlName = 'node-libcurl'
+  if (!globalThis.libcurl) {
+    try {
+      globalThis.libcurl = require(nodelibcurlName);
+    } catch (e) { }
+  }
 }
 
 module.exports.fetch = ponyfills.fetch;
