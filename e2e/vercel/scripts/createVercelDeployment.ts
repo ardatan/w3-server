@@ -133,16 +133,13 @@ export function createVercelDeployment(): DeploymentConfiguration<{
       const deployment = new VercelDeployment('vercel-function', {
         files: [
           {
-            file: '/api/whatwgnode.js',
-            data: await fsPromises.readFile(
-              join(__dirname, '..', 'pages', 'api', 'whatwgnode.js'),
-              'utf-8',
-            ),
+            file: '/api/[...slug].js',
+            data: await fsPromises.readFile(join(__dirname, '..', 'pages', 'api', '[...slug].js'), 'utf-8'),
           },
         ],
         name: `whatwg-node-e2e-testing`,
         functions: {
-          'api/whatwgnode.js': {
+          'api/[...slug].js': {
             memory: 256,
             maxDuration: 5,
           },
