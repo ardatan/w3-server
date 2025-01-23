@@ -7,30 +7,41 @@ import { githubComment } from 'https://raw.githubusercontent.com/dotansimha/k6-g
 import http from 'k6/http';
 import { Trend } from 'k6/metrics';
 
-const scenario = __ENV.SCENARIO;
-if (!scenario) {
-  throw new Error('SCENARIO env var not defined, see scenarios.ts for available scenarios');
-}
+const scenarios = ['consumeBody', 'noConsumeBody'];
+const fetchTypes = ['native', 'undici', 'nodeHttp', 'curl'];
 
 /** @type{import('k6/options').Options} */
 export const options = {
   thresholds: {
     active_handles: ['max<250'], // active handles must be below 250
   },
-  scenarios: {
-    [scenario]: {
+  scenarios: {},
+};
+
+const DURATION = 30;
+
+let index = 0;
+for (const scenario of scenarios) {
+  for (const fetchType of fetchTypes) {
+    options.scenarios[`${scenario}-${fetchType}`] = {
       executor: 'constant-vus',
       vus: 100,
-      duration: '30s',
+      duration: DURATION + 's',
       gracefulStop: '0s',
-    },
-  },
-};
+      startTime: DURATION * index + 's',
+      env: {
+        SCENARIO: scenario,
+        FETCH_TYPE: fetchType,
+      },
+    };
+    index++;
+  }
+}
 
 const activeHandles = new Trend('active_handles');
 
 export default function () {
-  http.get(`http://localhost:50001/scenarios/${scenario}`);
+  http.get(`http://localhost:50001/scenarios/${__ENV.SCENARIO}/${__ENV.FETCH_TYPE}`);
 
   const res = http.get('http://localhost:50001/activeHandles');
   activeHandles.add(parseInt(String(res.body)));
@@ -44,11 +55,11 @@ export function handleSummary(data) {
       pr: __ENV.GITHUB_PR,
       org: 'ardatan',
       repo: 'whatwg-node',
-      commentKey: `@benchmarks/node-fetch+${scenario}`,
+      commentKey: `@benchmarks/node-fetch`,
       renderTitle({ passes }) {
         return passes
-          ? `✅ \`@benchmarks/node-fetch\` results (${scenario})`
-          : `❌ \`@benchmarks/node-fetch\` failed (${scenario})`;
+          ? `✅ \`@benchmarks/node-fetch\` results`
+          : `❌ \`@benchmarks/node-fetch\` failed`;
       },
       renderMessage({ passes, checks, thresholds }) {
         const result = [];

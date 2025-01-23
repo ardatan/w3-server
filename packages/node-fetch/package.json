@@ -41,7 +41,8 @@
   "devDependencies": {
     "@types/busboy": "1.5.4",
     "@types/pem": "^1.14.0",
-    "pem": "^1.14.8"
+    "pem": "^1.14.8",
+    "undici": "^7.3.0"
   },
   "publishConfig": {
     "directory": "dist",

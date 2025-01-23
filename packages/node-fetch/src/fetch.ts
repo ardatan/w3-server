@@ -1,8 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { fetchCurl } from './fetchCurl.js';
+import { isPromise } from 'node:util/types';
+import { createFetchCurl } from './fetchCurl.js';
 import { fetchNodeHttp } from './fetchNodeHttp.js';
+import { createFetchUndici } from './fetchUndici.js';
 import { PonyfillRequest, RequestPonyfillInit } from './Request.js';
 import { PonyfillResponse } from './Response.js';
 import { PonyfillURL } from './URL.js';
@@ -57,15 +59,46 @@ function isURL(obj: any): obj is URL {
   return obj != null && obj.href != null;
 }
 
-export function fetchPonyfill<TResponseJSON = any, TRequestJSON = any>(
-  info: string | PonyfillRequest<TRequestJSON> | URL,
-  init?: RequestPonyfillInit,
-): Promise<PonyfillResponse<TResponseJSON>> {
-  if (typeof info === 'string' || isURL(info)) {
-    const ponyfillRequest = new PonyfillRequest(info, init);
-    return fetchPonyfill(ponyfillRequest);
+let fetchFn$: Promise<typeof fetchNodeHttp>;
+let fetchFn: typeof fetchNodeHttp;
+
+function getNativeGlobalDispatcher(): import('undici').Dispatcher {
+  // @ts-expect-error - We know it is there
+  return globalThis[Symbol.for('undici.globalDispatcher.1')];
+}
+
+function createFetchFn() {
+  const libcurlModuleName = 'node-libcurl';
+  const undiciModuleName = 'undici';
+  if (process.env.DEBUG) {
+    console.debug(
+      `[@whatwg-node/node-fetch] - Trying to import ${libcurlModuleName} for fetch ponyfill`,
+    );
   }
-  const fetchRequest = info;
+  return import(libcurlModuleName).then(
+    libcurl => createFetchCurl(libcurl),
+    () => {
+      if (process.env.DEBUG) {
+        console.debug(
+          `[@whatwg-node/node-fetch] - Failed to import ${libcurlModuleName}, trying ${undiciModuleName}`,
+        );
+      }
+      return import(undiciModuleName).then(
+        (undici: typeof import('undici')) => createFetchUndici(() => undici.getGlobalDispatcher()),
+        () => {
+          if (process.env.DEBUG) {
+            console.debug(
+              `[@whatwg-node/node-fetch] - Failed to import ${undiciModuleName}, falling back to built-in undici in Node`,
+            );
+          }
+          return createFetchUndici(getNativeGlobalDispatcher);
+        },
+      );
+    },
+  );
+}
+
+function fetchNonHttp(fetchRequest: PonyfillRequest) {
   if (fetchRequest.url.startsWith('data:')) {
     const response = getResponseForDataUri(fetchRequest.url);
     return fakePromise(response);
@@ -79,8 +112,54 @@ export function fetchPonyfill<TResponseJSON = any, TRequestJSON = any>(
     const response = getResponseForBlob(fetchRequest.url);
     return fakePromise(response);
   }
-  if (globalThis.libcurl && !fetchRequest.agent) {
-    return fetchCurl(fetchRequest);
+}
+
+function normalizeInfo(info: string | PonyfillRequest | URL, init?: RequestPonyfillInit) {
+  if (typeof info === 'string' || isURL(info)) {
+    return new PonyfillRequest(info, init);
   }
-  return fetchNodeHttp(fetchRequest);
+  return info;
+}
+
+export function createFetchPonyfill(fetchFn: typeof fetchNodeHttp) {
+  return function fetchPonyfill<TResponseJSON = any, TRequestJSON = any>(
+    info: string | PonyfillRequest<TRequestJSON> | URL,
+    init?: RequestPonyfillInit,
+  ): Promise<PonyfillResponse<TResponseJSON>> {
+    info = normalizeInfo(info, init);
+
+    const nonHttpRes = fetchNonHttp(info);
+
+    if (nonHttpRes) {
+      return nonHttpRes;
+    }
+
+    return fetchFn(info);
+  };
+}
+
+export function fetchPonyfill<TResponseJSON = any, TRequestJSON = any>(
+  info: string | PonyfillRequest<TRequestJSON> | URL,
+  init?: RequestPonyfillInit,
+): Promise<PonyfillResponse<TResponseJSON>> {
+  info = normalizeInfo(info, init);
+
+  const nonHttpRes = fetchNonHttp(info);
+
+  if (nonHttpRes) {
+    return nonHttpRes;
+  }
+
+  if (!fetchFn) {
+    fetchFn$ ||= createFetchFn();
+    if (isPromise(fetchFn$)) {
+      return fetchFn$.then(newFetchFn => {
+        fetchFn = newFetchFn;
+        return fetchFn(info);
+      });
+    }
+    fetchFn = fetchFn$;
+  }
+
+  return fetchFn(info);
 }

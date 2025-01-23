@@ -76,6 +76,6 @@ describe('FetchEvent listener', () => {
         );
       });
     },
-    { noLibCurl: true },
+    { noLibCurl: true, noUndici: true },
   );
 });

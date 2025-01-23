@@ -329,6 +329,6 @@ describe('adapter.fetch', () => {
         });
       });
     },
-    { noLibCurl: true },
+    { noLibCurl: true, noUndici: true },
   );
 });

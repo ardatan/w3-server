@@ -29,6 +29,6 @@ describe('useErrorHandling', () => {
         });
       });
     },
-    { noLibCurl: true },
+    { noLibCurl: true, noUndici: true },
   );
 });

@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@types/k6": "^0.54.0",
-    "tsx": "^4.7.1"
+    "tsx": "^4.7.1",
+    "undici": "^7.3.0"
   }
 }

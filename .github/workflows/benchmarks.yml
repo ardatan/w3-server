@@ -8,6 +8,10 @@ on:
     paths-ignore:
       - 'website/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   server:
     runs-on: ubuntu-latest
@@ -51,10 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        scenario:
-          - noConsumeBody
-          - consumeBody
     services:
       httpbin:
         image: mccutchen/go-httpbin
@@ -81,7 +81,6 @@ jobs:
         run: curl --retry 5 --retry-delay 1 --retry-connrefused http://localhost:50001
       - name: Benchmark
         env:
-          SCENARIO: ${{ matrix.scenario }}
           GITHUB_PR: ${{ github.event.number }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

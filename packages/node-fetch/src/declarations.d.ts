@@ -32,7 +32,7 @@ declare module '@kamilkisiela/fast-url-parser' {
 }
 
 // TODO
-declare var libcurl: any;
+declare var TEST_LIBCURL: any;
 declare module 'scheduler/tracing' {
   export type Interaction = any;
 }

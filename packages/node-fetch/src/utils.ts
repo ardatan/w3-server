@@ -73,12 +73,12 @@ export function isNodeReadable(obj: any): obj is Readable {
 
 export interface DeferredPromise<T = void> {
   promise: Promise<T>;
-  resolve: (value: T) => void;
+  resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason: any) => void;
 }
 
 export function createDeferredPromise<T = void>(): DeferredPromise<T> {
-  let resolveFn: (value: T) => void;
+  let resolveFn: (value: T | PromiseLike<T>) => void;
   let rejectFn: (reason: any) => void;
   const promise = new Promise<T>(function deferredPromiseExecutor(resolve, reject) {
     resolveFn = resolve;

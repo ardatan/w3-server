@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { fetchPonyfill } from '../src/fetch';
 
 const describeIf = (condition: boolean) => (condition ? describe : describe.skip);
-describeIf(globalThis.libcurl && !process.env.LEAK_TEST && !globalThis.Deno)('http2', () => {
+describeIf(globalThis.TEST_LIBCURL && !process.env.LEAK_TEST && !globalThis.Deno)('http2', () => {
   let server: Http2SecureServer;
   let pemPath: string;
   const oldEnvVar = process.env.NODE_EXTRA_CA_CERTS;

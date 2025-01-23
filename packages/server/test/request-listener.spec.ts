@@ -14,7 +14,7 @@ describe('Request Listener', () => {
     runTestsForEachServerImpl(testServer => {
       [...methodsWithBody, ...methodsWithoutBody].forEach(method => {
         // PATCH is buggy in Native
-        if (impl === 'native' && method === 'PATCH') return;
+        if (method === 'PATCH' && impl === 'native') return;
         it(`should handle regular requests with ${method}`, () => {
           const headers: Record<string, string> = {
             accept: 'application/json; charset=utf-8',
@@ -25,8 +25,8 @@ describe('Request Listener', () => {
             headers,
           };
           if (methodsWithBody.includes(method)) {
-            requestInit.body = getRegularRequestBody();
             headers['content-type'] = 'application/json; charset=utf-8';
+            requestInit.body = getRegularRequestBody();
           }
           const expectedResponse = new fetchAPI.Response(getRegularResponseBody(), {
             status: 200,
@@ -45,20 +45,22 @@ describe('Request Listener', () => {
         });
 
         it(`should handle incremental responses with ${method}`, () => {
+          const headers: Record<string, string> = {
+            accept: 'text/event-stream; charset=utf-8',
+            'x-random-header': Date.now().toString(),
+          };
           const requestInit: RequestInit = {
             method,
-            headers: {
-              accept: 'application/json; charset=utf-8',
-              'x-random-header': Date.now().toString(),
-            },
+            headers,
           };
           if (methodsWithBody.includes(method)) {
+            headers['content-type'] = 'application/json; charset=utf-8';
             requestInit.body = getRegularRequestBody();
           }
           const expectedResponse = new fetchAPI.Response(getIncrementalResponseBody(), {
             status: 200,
             headers: {
-              'content-type': 'application/json; charset=utf-8',
+              'content-type': 'text/event-stream; charset=utf-8',
               'x-random-header': Date.now().toString(),
             },
           });
@@ -75,8 +77,8 @@ describe('Request Listener', () => {
           const requestInit: RequestInit = {
             method,
             headers: {
+              accept: 'application/json; charset=utf-8',
               'x-random-header': Date.now().toString(),
-              'content-type': 'text/event-stream',
             },
             // @ts-expect-error duplex is not part of the RequestInit type yet
             duplex: 'half',

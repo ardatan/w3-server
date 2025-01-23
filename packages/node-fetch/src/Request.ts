@@ -137,6 +137,8 @@ export class PonyfillRequest<TJSON = any> extends PonyfillBody<TJSON> implements
 
   agent: HTTPAgent | HTTPSAgent | false | undefined;
 
+  dispatcher: import('undici').Dispatcher | undefined;
+
   private _signal: AbortSignal | undefined | null;
 
   get signal() {

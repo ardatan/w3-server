@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { isScenario, scenarios } from './scenarios';
+import { fetchTypes, scenarios } from './scenarios';
 
 const port = 50001;
 const httpbinUrl = 'http://localhost:50000/anything';
@@ -17,9 +17,9 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.url?.includes('/scenarios/')) {
-      const scenario = req.url.split('/').pop();
-      if (isScenario(scenario)) {
-        await scenarios[scenario](httpbinUrl);
+      const [, fetchType, scenario] = req.url.split('/');
+      if (scenarios[scenario] && fetchTypes[fetchType]) {
+        await scenarios[scenario](httpbinUrl, fetchType);
         return res.writeHead(200).end();
       }
     }

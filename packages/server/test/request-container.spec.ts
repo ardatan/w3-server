@@ -32,6 +32,6 @@ describe('Request Container', () => {
         );
       });
     },
-    { noLibCurl: true },
+    { noLibCurl: true, noUndici: true },
   );
 });

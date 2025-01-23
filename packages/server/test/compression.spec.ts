@@ -167,7 +167,16 @@ describe('Compression', () => {
           const res = await fetchAPI.fetch(server.url);
           const encodingSupported = encodings.some(e => e !== 'none');
           if (encodingSupported) {
-            expect(res.headers.get('content-encoding')).toBeTruthy();
+            try {
+              expect(res.headers.get('content-encoding')).toBeTruthy();
+            } catch (e) {
+              console.log({
+                req: req?.headers,
+                res: res.headers,
+                server: server.name,
+              });
+              throw e;
+            }
           }
           expect(res.status).toEqual(200);
           const acceptedEncodings = req?.headers.get('accept-encoding');

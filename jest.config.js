@@ -15,10 +15,12 @@ try {
   console.warn(`Failed to load uWebSockets.js. Skipping tests that require it.`, err);
 }
 
-try {
-  globals.libcurl = require('node-libcurl');
-} catch (err) {
-  console.warn('Failed to load node-libcurl. Skipping tests that require it.', err);
+if (process.env.LEAK_TEST) {
+  try {
+    globals.TEST_LIBCURL = require('node-libcurl');
+  } catch (err) {
+    console.warn('Failed to load node-libcurl. Skipping tests that require it.', err);
+  }
 }
 
 module.exports = {
