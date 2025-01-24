@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { createReadStream } from 'node:fs';
+import { createReadStream, promises as fsPromises } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fetchCurl } from './fetchCurl.js';
 import { fetchNodeHttp } from './fetchNodeHttp.js';
@@ -10,10 +10,35 @@ import { fakePromise } from './utils.js';
 
 const BASE64_SUFFIX = ';base64';
 
-function getResponseForFile(url: string) {
+async function getResponseForFile(url: string) {
   const path = fileURLToPath(url);
-  const readable = createReadStream(path);
-  return new PonyfillResponse(readable);
+  try {
+    const stats = await fsPromises.stat(path, {
+      bigint: true,
+    });
+    const readable = createReadStream(path);
+    return new PonyfillResponse(readable, {
+      status: 200,
+      statusText: 'OK',
+      headers: {
+        'content-type': 'application/octet-stream',
+        'last-modified': stats.mtime.toUTCString(),
+      },
+    });
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      return new PonyfillResponse(null, {
+        status: 404,
+        statusText: 'Not Found',
+      });
+    } else if (err.code === 'EACCES') {
+      return new PonyfillResponse(null, {
+        status: 403,
+        statusText: 'Forbidden',
+      });
+    }
+    throw err;
+  }
 }
 
 function getResponseForDataUri(url: string) {
@@ -73,7 +98,7 @@ export function fetchPonyfill<TResponseJSON = any, TRequestJSON = any>(
 
   if (fetchRequest.url.startsWith('file:')) {
     const response = getResponseForFile(fetchRequest.url);
-    return fakePromise(response);
+    return response;
   }
   if (fetchRequest.url.startsWith('blob:')) {
     const response = getResponseForBlob(fetchRequest.url);
